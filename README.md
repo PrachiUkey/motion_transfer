@@ -26,16 +26,20 @@ The output is a silent MP4 (audio is stripped automatically).
 ## Quick start
 
 ```bash
-# 1. Clone and install Python deps
-git clone <this-repo> ltx2-motion-transfer
-cd ltx2-motion-transfer
-uv sync --frozen
-source .venv/bin/activate
+# 1. Clone
+git clone git@github.com:PrachiUkey/motion_transfer.git
+cd motion_transfer
 
-# 2. Download model weights (~67 GB). Needs a HuggingFace token; see below.
+# 2. Install Python deps (pick ONE of the two options below — see "Install" section)
+uv sync --frozen && source .venv/bin/activate    # option A — uv (recommended)
+# -- or --
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu129 \
+  && pip install -e packages/ltx-core packages/ltx-pipelines   # option B — pip
+
+# 3. Download model weights (~67 GB). Needs a HuggingFace token; see "Models" section.
 python download_models.py
 
-# 3. Generate
+# 4. Generate
 python main.py path/to/your_image.png
 # → outputs/motion_transfer_<image_stem>.mp4
 ```
@@ -48,12 +52,44 @@ The default reference video is `assets/idle_avatar_15_reverse.mp4` (a 5-second i
 
 | | |
 |---|---|
-| **Package manager** | [`uv`](https://docs.astral.sh/uv/) (one-line install: `curl -LsSf https://astral.sh/uv/install.sh \| sh`) |
 | **Python** | ≥ 3.10 |
 | **GPU** | NVIDIA with ≥ 24 GB VRAM (e.g. RTX 4090, A100, H100). FP8 quantization is used to fit the 22B model in 24 GB. |
-| **CUDA** | 12.9 (PyTorch wheels are pinned) |
+| **CUDA** | 12.9 (PyTorch wheels are pinned to this) |
 | **RAM** | ≥ 32 GB (Gemma 3 text encoder runs on CPU to keep VRAM free) |
 | **Disk** | ~70 GB for model weights + ~1 MB per output video |
+
+---
+
+## Install
+
+You can use either **uv** (faster, single command, recommended) or plain **pip**.
+
+### Option A — uv
+
+```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+uv sync --frozen
+source .venv/bin/activate
+```
+
+`uv sync --frozen` reads `uv.lock` and installs the exact resolved versions (including the right PyTorch CUDA 12.9 wheel and the local `ltx-core` + `ltx-pipelines` workspace packages).
+
+### Option B — pip
+
+```bash
+# Create and activate a venv (recommended)
+python3 -m venv .venv && source .venv/bin/activate
+
+# Install all third-party deps, using PyTorch's CUDA 12.9 index for torch wheels
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu129
+
+# Install the two local packages in editable mode
+pip install -e packages/ltx-core packages/ltx-pipelines
+```
+
+`requirements.txt` is auto-generated from `uv.lock` (`uv export --no-dev --no-emit-workspace`) so the pinned versions stay in sync with the uv flow. The `--extra-index-url` is required so `pip` picks the CUDA 12.9 PyTorch wheel rather than the CPU-only default.
 
 ---
 

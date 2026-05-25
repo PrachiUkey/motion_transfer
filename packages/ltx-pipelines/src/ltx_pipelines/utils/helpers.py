@@ -1,5 +1,6 @@
 import gc
 import logging
+import os
 from dataclasses import replace
 
 import torch
@@ -73,6 +74,11 @@ def encode_prompts(
         prompts = list(prompts)
         prompts[0] = generate_enhanced_prompt(text_encoder, prompts[0], enhance_prompt_image, seed=enhance_prompt_seed)
     raw_outputs = [text_encoder.encode(p) for p in prompts]
+    if os.environ.get("LTX_TEXT_ENCODER_CPU") == "1":
+        raw_outputs = [
+            (tuple(h.to(model_ledger.device) for h in hs), mask.to(model_ledger.device))
+            for hs, mask in raw_outputs
+        ]
     torch.cuda.synchronize()
     del text_encoder
     cleanup_memory()

@@ -1,3 +1,4 @@
+import os
 from dataclasses import replace
 
 import torch
@@ -259,7 +260,10 @@ class ModelLedger:
                 "ModelLedger constructor."
             )
 
-        return self.text_encoder_builder.build(device=self._target_device(), dtype=self.dtype).to(self.device).eval()
+        encoder = self.text_encoder_builder.build(device=self._target_device(), dtype=self.dtype)
+        if os.environ.get("LTX_TEXT_ENCODER_CPU") == "1":
+            return encoder.to("cpu").eval()
+        return encoder.to(self.device).eval()
 
     def gemma_embeddings_processor(self) -> EmbeddingsProcessor:
         if not hasattr(self, "embeddings_processor_builder"):

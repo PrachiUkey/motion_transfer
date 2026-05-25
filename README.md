@@ -1,120 +1,158 @@
-# LTX-2
+# LTX-2 Motion Transfer
 
-[![Website](https://img.shields.io/badge/Website-LTX-181717?logo=google-chrome)](https://ltx.io)
-[![Model](https://img.shields.io/badge/HuggingFace-Model-orange?logo=huggingface)](https://huggingface.co/Lightricks/LTX-2.3)
-[![Demo](https://img.shields.io/badge/Demo-Try%20Now-brightgreen?logo=vercel)](https://app.ltx.studio/ltx-2-playground/i2v)
-[![Paper](https://img.shields.io/badge/Paper-PDF-EC1C24?logo=adobeacrobatreader&logoColor=white)](https://arxiv.org/abs/2601.03233)
-[![Discord](https://img.shields.io/badge/Join-Discord-5865F2?logo=discord)](https://discord.gg/ltxplatform)
+Transfer motion from a reference video onto a still image, producing a new short video where the image moves like the reference. Built on top of [Lightricks LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) using the **ICLoraPipeline** with IC-LoRA conditioning.
 
-**LTX-2** is the first DiT-based audio-video foundation model that contains all core capabilities of modern video generation in one model: synchronized audio and video, high fidelity, multiple performance modes, production-ready outputs, API access, and open access.
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/4414adc0-086c-43de-b367-9362eeb20228" width="70%" poster=""> </video>
-</div>
-
-## 🚀 Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/Lightricks/LTX-2.git
-cd LTX-2
-
-# Set up the environment
-uv sync --frozen
-source .venv/bin/activate
+```
+   subject image                  reference video                  output video
+   ┌──────────┐                   ┌──────────────┐               ┌─────────────┐
+   │   🧑      │   +               │  ↻ motion ↺  │   ───────▶    │  🧑 + motion │
+   └──────────┘                   └──────────────┘               └─────────────┘
+                                                                   (silent .mp4)
 ```
 
-### Required Models
+---
 
-Download the following models from the [LTX-2.3 HuggingFace repository](https://huggingface.co/Lightricks/LTX-2.3):
+## How it works (layman's version)
 
-**LTX-2.3 Model Checkpoint** (choose and download one of the following)
-  * [`ltx-2.3-22b-dev.safetensors`](https://huggingface.co/Lightricks/LTX-2.3/blob/main/ltx-2.3-22b-dev.safetensors) - [Download](https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-dev.safetensors)
-  * [`ltx-2.3-22b-distilled.safetensors`](https://huggingface.co/Lightricks/LTX-2.3/blob/main/ltx-2.3-22b-distilled.safetensors) - [Download](https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled.safetensors)
+1. **Subject image** — locks in *who/what* appears in the output (the person, clothes, background style).
+2. **Reference video** — supplies *how things move* (motion, pose, camera path).
+3. **Text prompt** — guides the overall scene description.
+4. **The model** — combines all three into a new video, in two stages: a fast low-res pass to lock in motion + composition, then a refinement pass that upsamples to the target resolution.
 
-**Spatial Upscaler** - Required for current two-stage pipeline implementations in this repository
-  * [`ltx-2.3-spatial-upscaler-x2-1.0.safetensors`](https://huggingface.co/Lightricks/LTX-2.3/blob/main/ltx-2.3-spatial-upscaler-x2-1.0.safetensors) - [Download](https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-spatial-upscaler-x2-1.0.safetensors)
-  * [`ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors`](https://huggingface.co/Lightricks/LTX-2.3/blob/main/ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors) - [Download](https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors)
+The output is a silent MP4 (audio is stripped automatically).
 
-**Temporal Upscaler** - Supported by the model and will be required for future pipeline implementations
-  * [`ltx-2.3-temporal-upscaler-x2-1.0.safetensors`](https://huggingface.co/Lightricks/LTX-2.3/blob/main/ltx-2.3-temporal-upscaler-x2-1.0.safetensors) - [Download](https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-temporal-upscaler-x2-1.0.safetensors)
+---
 
-**Distilled LoRA** - Required for current two-stage pipeline implementations in this repository (except DistilledPipeline and ICLoraPipeline)
-  * [`ltx-2.3-22b-distilled-lora-384.safetensors`](https://huggingface.co/Lightricks/LTX-2.3/blob/main/ltx-2.3-22b-distilled-lora-384.safetensors) - [Download](https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-lora-384.safetensors)
+## Quick start
 
-**Gemma Text Encoder** (download all assets from the repository)
-  * [`Gemma 3`](https://huggingface.co/google/gemma-3-12b-it-qat-q4_0-unquantized/tree/main)
+```bash
+# 1. Clone and install Python deps
+git clone <this-repo> ltx2-motion-transfer
+cd ltx2-motion-transfer
+uv sync --frozen
+source .venv/bin/activate
 
-**LoRAs**
-  * [`LTX-2.3-22b-IC-LoRA-Union-Control`](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control) - [Download](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors)
-  * [`LTX-2.3-22b-IC-LoRA-Inpainting`](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Inpainting) - [Download](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Inpainting/resolve/main/ltx-2.3-22b-ic-lora-inpainting.safetensors)
-  * [`LTX-2.3-22b-IC-LoRA-Motion-Track-Control`](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control) - [Download](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors)
-  * [`LTX-2-19b-IC-LoRA-Detailer`](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Detailer) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Detailer/resolve/main/ltx-2-19b-ic-lora-detailer.safetensors)
-  * [`LTX-2-19b-IC-LoRA-Pose-Control`](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Pose-Control) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Pose-Control/resolve/main/ltx-2-19b-ic-lora-pose-control.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Dolly-In`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-In) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-In/resolve/main/ltx-2-19b-lora-camera-control-dolly-in.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Dolly-Left`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Left) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Left/resolve/main/ltx-2-19b-lora-camera-control-dolly-left.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Dolly-Out`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Out) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Out/resolve/main/ltx-2-19b-lora-camera-control-dolly-out.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Dolly-Right`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Right) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Right/resolve/main/ltx-2-19b-lora-camera-control-dolly-right.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Jib-Down`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Down) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Down/resolve/main/ltx-2-19b-lora-camera-control-jib-down.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Jib-Up`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Up) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Up/resolve/main/ltx-2-19b-lora-camera-control-jib-up.safetensors)
-  * [`LTX-2-19b-LoRA-Camera-Control-Static`](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Static) - [Download](https://huggingface.co/Lightricks/LTX-2-19b-LoRA-Camera-Control-Static/resolve/main/ltx-2-19b-lora-camera-control-static.safetensors)
+# 2. Download model weights (~67 GB). Needs a HuggingFace token; see below.
+python download_models.py
 
-### Available Pipelines
+# 3. Generate
+python main.py path/to/your_image.png
+# → outputs/motion_transfer_<image_stem>.mp4
+```
 
-* **[TI2VidTwoStagesPipeline](packages/ltx-pipelines/src/ltx_pipelines/ti2vid_two_stages.py)** - Production-quality text/image-to-video with 2x upsampling (recommended)
-* **[TI2VidTwoStagesHQPipeline](packages/ltx-pipelines/src/ltx_pipelines/ti2vid_two_stages_hq.py)** - Same two-stage flow as above but uses the res_2s second-order sampler (fewer steps, better quality)
-* **[TI2VidOneStagePipeline](packages/ltx-pipelines/src/ltx_pipelines/ti2vid_one_stage.py)** - Single-stage generation for quick prototyping
-* **[DistilledPipeline](packages/ltx-pipelines/src/ltx_pipelines/distilled.py)** - Fastest inference with 8 predefined sigmas
-* **[ICLoraPipeline](packages/ltx-pipelines/src/ltx_pipelines/ic_lora.py)** - Video-to-video and image-to-video transformations (uses distilled model.)
-* **[KeyframeInterpolationPipeline](packages/ltx-pipelines/src/ltx_pipelines/keyframe_interpolation.py)** - Interpolate between keyframe images
-* **[A2VidPipelineTwoStage](packages/ltx-pipelines/src/ltx_pipelines/a2vid_two_stage.py)** - Audio-to-video generation conditioned on an input audio file
-* **[RetakePipeline](packages/ltx-pipelines/src/ltx_pipelines/retake.py)** - Regenerate a specific time region of an existing video
+The default reference video is `assets/idle_avatar_15_reverse.mp4` (a 5-second idle-avatar clip). Override it with `--video your_motion.mp4`.
 
-### ⚡ Optimization Tips
+---
 
-* **Use DistilledPipeline** - Fastest inference with only 8 predefined sigmas (8 steps stage 1, 4 steps stage 2)
-* **Enable FP8 quantization** - Enables lower memory footprint: `--quantization fp8-cast` (CLI) or `quantization=QuantizationPolicy.fp8_cast()` (Python). For Hopper GPUs with TensorRT-LLM, use `--quantization fp8-scaled-mm` for FP8 scaled matrix multiplication.
-* **Install attention optimizations** - Use xFormers (`uv sync --extra xformers`) or [Flash Attention 3](https://github.com/Dao-AILab/flash-attention) for Hopper GPUs
-* **Use gradient estimation** - Reduce inference steps from 40 to 20-30 while maintaining quality (see [pipeline documentation](packages/ltx-pipelines/README.md#denoising-loop-optimization))
-* **Skip memory cleanup** - If you have sufficient VRAM, disable automatic memory cleanup between stages for faster processing
-* **Choose single-stage pipeline** - Use `TI2VidOneStagePipeline` for faster generation when high resolution isn't required
+## Requirements
 
-## ✍️ Prompting for LTX-2
+| | |
+|---|---|
+| **Package manager** | [`uv`](https://docs.astral.sh/uv/) (one-line install: `curl -LsSf https://astral.sh/uv/install.sh \| sh`) |
+| **Python** | ≥ 3.10 |
+| **GPU** | NVIDIA with ≥ 24 GB VRAM (e.g. RTX 4090, A100, H100). FP8 quantization is used to fit the 22B model in 24 GB. |
+| **CUDA** | 12.9 (PyTorch wheels are pinned) |
+| **RAM** | ≥ 32 GB (Gemma 3 text encoder runs on CPU to keep VRAM free) |
+| **Disk** | ~70 GB for model weights + ~1 MB per output video |
 
-When writing prompts, focus on detailed, chronological descriptions of actions and scenes. Include specific movements, appearances, camera angles, and environmental details - all in a single flowing paragraph. Start directly with the action, and keep descriptions literal and precise. Think like a cinematographer describing a shot list. Keep within 200 words. For best results, build your prompts using this structure:
+---
 
-- Start with main action in a single sentence
-- Add specific details about movements and gestures
-- Describe character/object appearances precisely
-- Include background and environment details
-- Specify camera angles and movements
-- Describe lighting and colors
-- Note any changes or sudden events
+## Model weights
 
-For additional guidance on writing a prompt please refer to <https://ltx.video/blog/how-to-prompt-for-ltx-2>
+`download_models.py` fetches four sets of weights into `./models/`:
 
-### Automatic Prompt Enhancement
+| Subdir | File | Source | Size |
+|---|---|---|---|
+| `distilled/` | `ltx-2.3-22b-distilled.safetensors` | [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) | ~43 GB |
+| `upscaler/` | `ltx-2.3-spatial-upscaler-x2-1.0.safetensors` | [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) | ~1 GB |
+| `ic-lora/` | `ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors` | [Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control) | ~0.3 GB |
+| `gemma/` | Gemma 3 12B (5 shards + tokenizer) | [google/gemma-3-12b-it-qat-q4_0-unquantized](https://huggingface.co/google/gemma-3-12b-it-qat-q4_0-unquantized) — **gated** | ~23 GB |
 
-LTX-2 pipelines support automatic prompt enhancement via an `enhance_prompt` parameter.
+### HuggingFace token (one-time setup)
 
-## 🔌 ComfyUI Integration
+Gemma 3 is a gated Google model. Before running `download_models.py`:
 
-To use our model with ComfyUI, please follow the instructions at <https://github.com/Lightricks/ComfyUI-LTXVideo/>.
+1. Sign in at https://huggingface.co.
+2. Visit https://huggingface.co/google/gemma-3-12b-it-qat-q4_0-unquantized, click **"Acknowledge license"**, and submit the form.
+3. Create a **Read** token at https://huggingface.co/settings/tokens.
 
-## 📦 Packages
+Provide the token any of these ways (script checks in order):
+- `export HF_TOKEN=hf_...`
+- `export HUGGINGFACE_HUB_TOKEN=hf_...`
+- `huggingface-cli login` (caches token in `~/.cache/huggingface/token`)
+- Interactive prompt (the script asks if none of the above are set)
 
-This repository is organized as a monorepo with three main packages:
+The token stays on your machine. It is **not** committed to the repo.
 
-* **[ltx-core](packages/ltx-core/)** - Core model implementation, inference stack, and utilities
-* **[ltx-pipelines](packages/ltx-pipelines/)** - High-level pipeline implementations for text-to-video, image-to-video, and other generation modes
-* **[ltx-trainer](packages/ltx-trainer/)** - Training and fine-tuning tools for LoRA, full fine-tuning, and IC-LoRA
+---
 
-Each package has its own README and documentation. See the [Documentation](#-documentation) section below.
+## Using `main.py`
 
-## 📚 Documentation
+```bash
+python main.py IMAGE [--video VIDEO] [--prompt PROMPT] [--output PATH] [options]
+```
 
-Each package includes comprehensive documentation:
+| Flag | Default | Purpose |
+|---|---|---|
+| `IMAGE` | *(required)* | Subject image (PNG / JPG). Convert paletted/grayscale PNGs to RGB first. |
+| `--video` | `assets/idle_avatar_15_reverse.mp4` | Reference motion video. |
+| `--prompt` | "A person facing the camera with subtle head and shoulder movement…" | Text prompt for the output. |
+| `--output` | `outputs/motion_transfer_<image_stem>.mp4` | Where to write the silent MP4. |
+| `--height` / `--width` | `768` / `768` | Output resolution (must be multiples of 64). |
+| `--num-frames` | `121` | Frame count (≈ 5 s at 25 fps). |
+| `--frame-rate` | `25.0` | Output fps. |
+| `--seed` | `42` | Reproducibility. |
+| `--lora-strength` | `0.8` | How strongly the IC-LoRA influences output. Try 0.6–1.0. |
+| `--video-strength` | `1.0` | How strongly the reference motion drives output. |
+| `--image-strength` | `1.0` | How strongly the subject image anchors appearance. |
 
-* **[LTX-Core README](packages/ltx-core/README.md)** - Core model implementation, inference stack, and utilities
-* **[LTX-Pipelines README](packages/ltx-pipelines/README.md)** - High-level pipeline implementations and usage guides
-* **[LTX-Trainer README](packages/ltx-trainer/README.md)** - Training and fine-tuning documentation with detailed guides
+Internally, `main.py`:
+1. Sets `LTX_TEXT_ENCODER_CPU=1` so Gemma runs on CPU (needed on 24 GB GPUs).
+2. Invokes `python -m ltx_pipelines.ic_lora` with FP8 quantization.
+3. Strips the audio stream losslessly via PyAV (no `ffmpeg` binary required).
+
+---
+
+## Tuning tips
+
+- **Motion too weak** → raise `--video-strength` (try 1.0–1.5) or `--lora-strength`.
+- **Motion too rigid / face distorts** → lower `--lora-strength` to 0.5–0.7.
+- **Subject drifts from the image** → raise `--image-strength`, keep the image anchored at frame 0.
+- **Out of VRAM** → lower `--height` / `--width` to 512, or `--num-frames` to 81. FP8 quantization is already on.
+- **Faster preview** → temporarily set `--num-frames 49 --height 512 --width 512` for a 2-second 512² draft.
+
+---
+
+## Repo layout
+
+```
+.
+├── main.py                            # generate a single silent video
+├── download_models.py                 # fetch all weights into models/
+├── assets/
+│   └── idle_avatar_15_reverse.mp4     # default reference motion
+├── models/                            # downloaded weights (gitignored)
+├── outputs/                           # generated MP4s (gitignored)
+└── packages/
+    ├── ltx-core/                      # LTX-2 model implementation
+    └── ltx-pipelines/                 # ICLoraPipeline + shared utils
+```
+
+---
+
+## Troubleshooting
+
+- **`GatedRepoError: 403`** during Gemma download → your account hasn't accepted the Gemma 3 license yet. See the [HF token](#huggingface-token-one-time-setup) section.
+- **`ValueError: Expected numpy array with ndim 3`** during run → your input image is grayscale or palette-indexed. Convert to RGB first:
+  ```python
+  from PIL import Image; Image.open("img.png").convert("RGB").save("img.png")
+  ```
+- **`CUBLAS_STATUS_ALLOC_FAILED`** → out of GPU memory. Confirm no other processes are holding the card with `nvidia-smi`. Try lower resolution.
+
+---
+
+## License & credits
+
+- This project builds on [Lightricks LTX-2](https://huggingface.co/Lightricks/LTX-2.3). Source code in `packages/` is governed by the [LTX-2 Community License Agreement](LICENSE).
+- The Gemma 3 text encoder is © Google, used under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+- Pipeline: `ICLoraPipeline` from [packages/ltx-pipelines/src/ltx_pipelines/ic_lora.py](packages/ltx-pipelines/src/ltx_pipelines/ic_lora.py).

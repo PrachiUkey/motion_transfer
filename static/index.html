@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LTX-2 Motion Transfer</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; }
+    h1 { margin-bottom: 0.25rem; }
+    p.subtitle { color: #888; margin-top: 0; }
+    form { display: grid; gap: 1rem; margin: 1.5rem 0; padding: 1.25rem; border: 1px solid #ccc4; border-radius: 8px; }
+    label { display: grid; gap: 0.35rem; font-weight: 600; font-size: 0.95rem; }
+    label small { font-weight: 400; color: #888; }
+    input[type="file"], textarea { font: inherit; padding: 0.4rem; border: 1px solid #ccc4; border-radius: 4px; background: transparent; color: inherit; }
+    textarea { resize: vertical; min-height: 3.5rem; }
+    button { font: inherit; padding: 0.6rem 1.2rem; border: none; border-radius: 6px; background: #4f46e5; color: white; font-weight: 600; cursor: pointer; }
+    button:disabled { background: #999; cursor: not-allowed; }
+    .hint { color: #888; font-size: 0.85rem; }
+    #status { padding: 0.75rem 1rem; border-radius: 6px; background: #4f46e510; border: 1px solid #4f46e530; min-height: 1.5em; }
+    #status.failed { background: #ef444420; border-color: #ef444450; }
+    #status.done { background: #10b98120; border-color: #10b98150; }
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+    .panel h3 { margin: 0 0 0.5rem 0; font-size: 0.9rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+    .panel img, .panel video { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 8px; background: black; }
+    .meta { color: #888; font-size: 0.85rem; margin-top: 0.4rem; }
+    code { background: #8884; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>LTX-2 Motion Transfer</h1>
+  <p class="subtitle">Upload an image. Optionally upload a reference motion video. Get back a silent MP4 where your image moves like the reference.</p>
+
+  <form id="form">
+    <label>
+      Subject image (PNG / JPG)
+      <input type="file" name="image" accept="image/*" required />
+    </label>
+
+    <label>
+      Reference motion video <small>(optional &mdash; defaults to <code>assets/idle_avatar_15_reverse.mp4</code>)</small>
+      <input type="file" name="video" accept="video/*" />
+    </label>
+
+    <label>
+      Prompt <small>(optional &mdash; falls back to the talking-head default in <code>main.py</code>)</small>
+      <textarea name="prompt" rows="2" placeholder="e.g. a person smiling and looking around, photorealistic"></textarea>
+    </label>
+
+    <button type="submit" id="submit">Generate</button>
+    <p class="hint">Generation takes about <strong>5–7 minutes</strong> per request on the connected GPU (most of which is loading the 45&nbsp;GB checkpoint).</p>
+  </form>
+
+  <div id="status">Ready.</div>
+  <p class="meta" id="meta"></p>
+
+  <div class="panels">
+    <div class="panel">
+      <h3>Subject image</h3>
+      <img id="imagePreview" alt="Uploaded subject image will appear here" />
+    </div>
+    <div class="panel">
+      <h3>Generated video</h3>
+      <video id="result" controls playsinline poster=""></video>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:1rem;">
+    <h3>Reference motion (input)</h3>
+    <video id="referencePreview" controls playsinline muted></video>
+  </div>
+
+  <script>
+    const form = document.getElementById("form");
+    const statusEl = document.getElementById("status");
+    const metaEl = document.getElementById("meta");
+    const submitBtn = document.getElementById("submit");
+    const resultEl = document.getElementById("result");
+    const imagePreview = document.getElementById("imagePreview");
+    const referencePreview = document.getElementById("referencePreview");
+    const imageInput = form.elements["image"];
+    const videoInput = form.elements["video"];
+
+    // Show selected image immediately
+    imageInput.addEventListener("change", () => {
+      const f = imageInput.files[0];
+      if (f) imagePreview.src = URL.createObjectURL(f);
+    });
+
+    // Show selected reference video, or fall back to the default
+    function setReference(src) { referencePreview.src = src; }
+    videoInput.addEventListener("change", () => {
+      const f = videoInput.files[0];
+      setReference(f ? URL.createObjectURL(f) : "/static/default_reference.mp4");
+    });
+    // Default on page load
+    setReference("/static/default_reference.mp4");
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = kind || "";
+    }
+
+    async function pollJob(jobId, startedAt) {
+      try {
+        const r = await fetch(`/jobs/${jobId}`);
+        if (r.status === 404) {
+          setStatus(`Job ${jobId} was lost (server restarted). Submit again.`, "failed");
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Generate";
+          return;
+        }
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        const job = await r.json();
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        setStatus(`Job ${jobId} — ${job.status} (${elapsed}s)`);
+
+        if (job.status === "done") {
+          setStatus(`Done in ${elapsed}s. Job ${jobId}.`, "done");
+          resultEl.src = `/jobs/${jobId}/result`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Generate";
+        } else if (job.status === "failed") {
+          setStatus(`Failed: ${(job.error || "unknown").slice(0, 300)}`, "failed");
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Generate";
+        } else {
+          setTimeout(() => pollJob(jobId, startedAt), 3000);
+        }
+      } catch (e) {
+        setStatus(`Polling error: ${e.message}`, "failed");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Generate";
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      resultEl.removeAttribute("src");
+
+      const fd = new FormData(form);
+      // FastAPI rejects empty optional file/form fields; strip them.
+      const video = fd.get("video");
+      if (!video || !video.size) fd.delete("video");
+      if (!fd.get("prompt")) fd.delete("prompt");
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Generating...";
+      setStatus("Uploading...");
+
+      try {
+        const r = await fetch("/generate", { method: "POST", body: fd });
+        if (!r.ok) {
+          const txt = await r.text();
+          throw new Error(`${r.status} ${txt}`);
+        }
+        const { job_id, image, video: vid, used_default_video } = await r.json();
+        metaEl.textContent =
+          `Image: ${image}  ·  Reference: ${vid}${used_default_video ? " (default)" : ""}  ·  Job: ${job_id}`;
+        setStatus(`Job ${job_id} queued.`);
+        pollJob(job_id, Date.now());
+      } catch (err) {
+        setStatus(`Submission failed: ${err.message}`, "failed");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Generate";
+      }
+    });
+  </script>
+</body>
+</html>

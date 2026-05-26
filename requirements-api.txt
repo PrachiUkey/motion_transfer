@@ -1,0 +1,6 @@
+# Extra dependencies for the FastAPI server (server.py + static/index.html).
+# Install on top of requirements.txt:
+#   pip install -r requirements-api.txt
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
